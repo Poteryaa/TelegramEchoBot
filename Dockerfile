@@ -1,6 +1,7 @@
-# Используем .NET 8 runtime для выполнения
-FROM mcr.microsoft.com/dotnet/runtime:8.0 AS base
+# ИСПРАВЛЕНО: Используем ASP.NET Core runtime вместо обычного .NET runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
+EXPOSE 80
 
 # Используем .NET 8 SDK для сборки
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
@@ -25,5 +26,5 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# Запускаем твой бот
+# Запускаем бот
 ENTRYPOINT ["dotnet", "TelegramEchoBot.dll"]

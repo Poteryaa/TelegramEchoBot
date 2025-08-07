@@ -2,23 +2,58 @@
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Exceptions;
-using DotNetEnv;
-
-Env.Load();
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 var token = Environment.GetEnvironmentVariable("TELEGRAM_TOKEN");
-var botClient = new TelegramBotClient(token!);
 
-using var cts = new CancellationTokenSource();
+if (string.IsNullOrEmpty(token))
+{
+    Console.WriteLine("TELEGRAM_TOKEN не найден!");
+    return;
+}
 
-botClient.StartReceiving(
-    new DefaultUpdateHandler(HandleUpdateAsync, HandleErrorAsync),
-    cancellationToken: cts.Token
-);
+var botClient = new TelegramBotClient(token);
 
-var me = await botClient.GetMe();
-Console.WriteLine($"Бот запущен: @{me.Username}");
-Console.ReadLine();
+// Создаем веб-приложение для Render
+var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+// Health check endpoints для Render
+app.MapGet("/", () => "Telegram Echo Bot работает!");
+app.MapGet("/health", () => "OK");
+
+// Запускаем бота в фоновом режиме
+_ = Task.Run(async () =>
+{
+    using var cts = new CancellationTokenSource();
+
+    botClient.StartReceiving(
+        new DefaultUpdateHandler(HandleUpdateAsync, HandleErrorAsync),
+        cancellationToken: cts.Token
+    );
+
+    var me = await botClient.GetMe();
+    Console.WriteLine($"Бот запущен: @{me.Username}");
+
+    // Держим бота активным
+    try
+    {
+        await Task.Delay(-1, cts.Token);
+    }
+    catch (TaskCanceledException)
+    {
+        Console.WriteLine("Бот остановлен");
+    }
+});
+
+// Получаем порт от Render (обязательно!)
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+app.Urls.Add($"http://0.0.0.0:{port}");
+
+Console.WriteLine($"Веб-сервер запускается на порту {port}");
+await app.RunAsync();
 
 static async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
 {
